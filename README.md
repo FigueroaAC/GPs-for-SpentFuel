@@ -1,6 +1,6 @@
 # GPs-for-SpentFuel
 
-This repository contains scripts used to implement a Gaussian Process Regression model for Spent Fuel nuclides.
+This repository contains scripts used to implement a Gaussian Process Regression model for spent fuel nuclide concentrations.
 
 
  -------------------------------------------------------
