@@ -14,6 +14,18 @@ from scipy.spatial import distance
 from tqdm import tqdm
 # In[]:    
 def GPR_MODEL(Params,Lambda_Inv,Xtrain,Ytrain,alpha_,Xtest):
+    """ Implementation of a GP mean (mu) predictor
+        
+        mu = Ktrans \dot alpha_
+        
+        inputs:
+            * Params, Lambda_Inv: Trained kernel parameters.
+            * alpha_: Precomputed product of (Kself+\sigma*I)^{-1} \dot Ytrain.
+            * Xtrain, Ytrain: Training datasets.
+            * Xtest: Test point.
+        outputs:
+            * Y_pred: Predicted mean of the GP at the queried point.
+    """
     Constant = Params[0]
     sigma = Params[-1]
     Distance = Xtest - Xtrain
@@ -24,6 +36,22 @@ def GPR_MODEL(Params,Lambda_Inv,Xtrain,Ytrain,alpha_,Xtest):
     return Y_pred  
 
 def alpha_calculator(Params,X,Y):
+    """
+    Precalculation of the alpha_ and Kinv constants used for the computation
+    of the posterior GP mean and variance respectively.
+    
+        alpha_ = (Kself+\sigma*I)^{-1} \dot Ytrain
+        K_inv = (Kself+\sigma*I)^{-1}
+        
+        inputs:
+            * Params: Trained kernel parameters.
+            * X,Y: Training datasets.
+        outputs:
+            * alpha_: Vector used for the computation of the GP mean.
+            * K_inv: matrix used for the computation of the GP variance.
+            
+    
+    """
     Cs = Params[0]
     P =  Params[1:-1]
     alpha = Params[-1]
@@ -44,6 +72,21 @@ def alpha_calculator(Params,X,Y):
     return alpha_, K_inv
 
 def GPR_MODEL_w_Std(Params,Lambda_Inv,Xtrain,Ytrain,alpha_,K_inv,Xtest):
+     """ Implementation of a GP mean (mu) and variance (var) predictor
+        
+        mu = Ktrans \dot alpha_
+        var = Ktranstrans - Ktrans.T \dot K_inv \dot Ktrans
+        
+        inputs:
+            * Params, Lambda_Inv: Trained kernel parameters.
+            * alpha_: Precomputed product of (Kself+\sigma*I)^{-1} \dot Ytrain.
+            * K_inv: Precomputed inverse matrix of self covariance.
+            * Xtrain, Ytrain: Training datasets.
+            * Xtest: Test point.
+        outputs:
+            * Y_pred: Predicted mean of the GP at the queried point.
+            * Var: Predicted variance of the GP at the queried point
+    """
     Constant = Params[0]
     sigma = Params[-1]
     Distance = Xtest - Xtrain
@@ -55,14 +98,41 @@ def GPR_MODEL_w_Std(Params,Lambda_Inv,Xtrain,Ytrain,alpha_,K_inv,Xtest):
     Y_pred = (Y_pred*np.std(Ytrain))+np.mean(Ytrain)
 
     Var = np.expand_dims(Ktranstrans,-1) -np.einsum(
-            "ij,ij->i", np.dot(np.expand_dims(Ktrans,0), K_inv), np.expand_dims(Ktrans,0))
+            "ij,ij->i", np.dot(np.expand_dims(Ktrans,0), K_inv), 
+            np.expand_dims(Ktrans,0))
     Var = np.sqrt(np.abs(Var[0]))
 
     return Y_pred, Var
 
 
 def gen_mask(option,data,testtype,spacing,mode):
-    """Experimental Design Generator"""
+    """Experimental Design Generator for grid sampling and testing:
+        
+        Three options are available:
+            * Even: Even selection of points in the grid.
+            * Odd: Odd selection of points in the grid.
+            * Checkerboard: Checkerboard Pattern.
+        Furthermore, for the spacing variable adds more variety as it allows
+        to change the spacing for Even and Odd patterns. 
+        
+        inputs:
+            * option: Type of design (Even, Odd or Checkboard).
+            * data: The array upon which the design is desired.
+            * testtype: The design itself leaves many points unnacounted for.
+                        Here one can choose if the test set would be composed
+                        from the rest of the points not in the design (all),
+                        the borders of the space only (borders), or only points
+                        lying inside the space (inner) for pure interpolation.
+            *spacing: The spacing desired between points for the designed
+                      training set.
+            *mode : 
+                -normal: Used for calculations
+                -testing: Used for plotting.
+        outputs:
+            * Train, Test: flattened but ordered arrays used for training
+                           testing the interpolation methods.
+        
+    """
     
     def rest_array(array,testtype):
         if testtype == 'all':
@@ -151,6 +221,37 @@ def get_Error(Ypred,Ytrue):
 def intp_comparison(isotope,option,size,Grid_Setting,Test_type,space_factor,
                     op_mode,X,Y,sorting_index,Kernel_type,Xsobol,Ysobol):
     
+    """
+    Comparison between Cubic Splines and GP models.
+    
+    inputs:
+        *isotope: nuclide to use for comparison
+        *option: 
+            -Grid: for comparisons on models trained on a Grid
+            -Random: for comparisons on models trained on a random selection
+                     of the datasets.
+            -Sobol: for comparisons on models trained on a Sobol sequence.
+        *size: The number of samples to consider. Only considered when selecting
+               the option 'Sobol' or 'Random'.
+        *Grid_Setting: Selects the option on the design generator (Even, Odd or
+                       Checkerboard).
+        *Test_type: Selects the option on the design generator(All, inner or
+                    borders).
+        *space_factor: Sets the spacing on the design generator.
+        *op_mode: Sets the operation mode of the design generator (normal,
+                  testing).
+        * X,Y, Xsobol, Ysobol: Training / Testing sets
+        * sorting_index: Only used for X and Y on a grid. Reorder Ys points to
+                         correctly match the points of the sampling grid.
+        * Kernel_type: Used to select the kernel type used (Kernels-Mass, 
+                       Kernels-Adens. etc)
+    outputs:
+        * Values_Cubic,Values_GPR: Contain diagnostics such as MAE, RMSE, MSE,
+                                   Rsquared, plus mean predictive variance and
+                                   fractions of predicted points within 
+                                   predictive variance for GPR.
+    """
+    
     Temperature = np.array(list(set(X[:,0])))
     Burnup = np.array(list(set(X[:,1])))
     Burnup = np.sort(Burnup)
@@ -164,9 +265,6 @@ def intp_comparison(isotope,option,size,Grid_Setting,Test_type,space_factor,
     # =========================================================================
     # Cubic
     # =========================================================================
-        """
-        I've tested the grid pattern generation and is working as intended, no problem here
-        """
         Tmesh, Bmesh = np.meshgrid(Temperature,Burnup)
         BtrainCubic,BtestCubic = gen_mask(
                 Grid_Setting,Bmesh,Test_type,space_factor,op_mode)
@@ -324,11 +422,11 @@ Grid_Setting = 'Sobol'#'Even'|'Odd'|'Checkerboard'|'Sobol'
 Test_type = 'all' #'all'|'inner'|'borders'
 op_mode = 'normal' # '
 space_factor = 2 # Grid Spacing
-size = 600 # Used when option != Grid
+size = 625 # Used when option != Grid
 option = 'Sobol'#'Grid'|'random'|'Sobol'
 sorting_index = np.load('/sorting_indexes.npy',allow_pickle=True)
 
-Kernel_type = 'Kernels-Mass'# 'Kernels-All' | 'Kernels-Mass' | 'Kernels-Adens' | 'Kernels-Sobol' -> Use this one for atom density
+Kernel_type = 'Kernels-Mass'#| 'Kernels-Mass' | 'Kernels-Adens' | -> Use this one for atom density
 # Kernels-Mass = Kernels for total mass as outputs, uses the entire data set to train the GPR parameters
 Path = ''
 # =============================================================================
