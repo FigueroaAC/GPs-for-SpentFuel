@@ -303,16 +303,16 @@ Xsobol = np.load('/X_Candu_Sobol625.npy',
 # Use this to perform the interpolation on the atom density data set
 # =========================================================================
     
-#Y = np.load('/Users/AFigueroa/Desktop/GPR-Paper/Training_Sets/Y_Candu_Grid625.npy',
+#Y = np.load('/Users/AFigueroa/Desktop/GPR-Paper/Training_Sets/Y_Candu_Grid625Adens.npy',
 #           allow_pickle=True).item()
     
     
 # =========================================================================
 # Use this to perform the interpolation on the total mass data set
 # =========================================================================
-Y = np.load('/YTotal_Output_GridMdens.npy',
+Y = np.load('/YCandu_Output_Grid.npy',
                allow_pickle=True).item()
-Ysobol = np.load('/YTotal_Output_Sobol.npy',
+Ysobol = np.load('/YCandu_Output_Sobol.npy',
                 allow_pickle=True).item()
 
 # In[]:
